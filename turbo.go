@@ -12,6 +12,20 @@ import (
 )
 
 const (
+	// TurbolinksReferrer is the header sent by the Turbolinks frontend on any
+	// XHR requests powered by Turbolinks. We use this header to detect if the
+	// current request was sent from Turbolinks.
+	TurbolinksReferrer = "Turbolinks-Referrer"
+
+	// TurbolinksCookie is the name of the cookie that we use to handle
+	// redirect requests correctly.
+	//
+	// We name it `_turbolinks_location` to be consistent with the name Rails
+	// give to the cookie that serves the same purpose.
+	TurbolinksCookie = "_turbolinks_location"
+)
+
+const (
 	DefaultLeftDelim  = "{{"
 	DefaultRightDelim = "}}"
 )
@@ -45,14 +59,12 @@ func New(directory string, layout string) *Render {
 	return r
 }
 
+// HTML renders an HTML template.
 func (r *Render) HTML(w http.ResponseWriter, status int, name string, binding interface{}) error {
 	// If we're in development mode, recompile the templates.
 	if r.IsDevelopment {
 		r.compileTemplatesFromDir()
 	}
-
-	// TODO(ben)
-	// If Turbolinks is enabled, render the template without the layout.
 
 	// Assign a layout if there is one.
 	if r.Layout != "" {
@@ -61,10 +73,6 @@ func (r *Render) HTML(w http.ResponseWriter, status int, name string, binding in
 	}
 
 	// Execute the template.
-	//
-	// Note that this fails in interesting ways -- if the template can't be
-	// found, we should fail, but all that happens right now is only the part
-	// the "layout" template _before_ the {{ yield }} is rendered.
 	w.WriteHeader(status)
 	r.templates.ExecuteTemplate(w, name, binding)
 
@@ -164,4 +172,85 @@ func (r *Render) compileTemplatesFromDir() {
 
 		return nil
 	})
+}
+
+// Handler is a middleware wrapper for Turbolinks.
+func Handler(h http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		referer := r.Header.Get(TurbolinksReferrer)
+		if referer == "" {
+			// Turbolinks isn't enabled, so don't do anything extra.
+			h.ServeHTTP(w, r)
+			return
+		}
+
+		if cookie, err := r.Cookie(TurbolinksCookie); err == nil {
+			w.Header().Set("Turbolinks-Location", "/")
+			cookie.MaxAge = -1
+			http.SetCookie(w, cookie)
+		}
+
+		// Handle the request. We use a "response staller" here so that,
+		//
+		//	* The request isn't sent when the underlying http.ResponseWriter
+		//	  calls write.
+		//	* We can still write to the header after the request is handled.
+		//
+		// This is done in order to append the `_turbolinks_location` cookie
+		// for the requests that need it.
+		rs := &responseStaller{
+			w:    w,
+			code: 0,
+			buf:  &bytes.Buffer{},
+		}
+		h.ServeHTTP(rs, r)
+
+		// Check if a redirect was performed. Is there was, then we need a way
+		// to tell the next request to set the special Turbolinks header that
+		// will force Turbolinks to update the URL (as push state history) for
+		// that redirect. We do this by setting a cookie on this request that
+		// we can check on the next request.
+		//
+		// TODO(ben) Also handle POST redirects properly.
+		if location := rs.Header().Get("Location"); location != "" {
+			http.SetCookie(rs, &http.Cookie{
+				Name:     TurbolinksCookie,
+				Value:    "true",
+				Path:     "/",
+				HttpOnly: true,
+			})
+		}
+
+		rs.SendResponse()
+	})
+}
+
+type responseStaller struct {
+	w    http.ResponseWriter
+	code int
+	buf  *bytes.Buffer
+}
+
+// Write is a wrapper that calls the underlying response writer's Write
+// method, but write the response to a buffer instead.
+func (rw *responseStaller) Write(b []byte) (int, error) {
+	return rw.buf.Write(b)
+}
+
+// WriteHeader saves the status code, to be sent later during the SendReponse
+// call.
+func (rw *responseStaller) WriteHeader(code int) {
+	rw.code = code
+}
+
+// Header wraps the underlying response writers Header method.
+func (rw *responseStaller) Header() http.Header {
+	return rw.w.Header()
+}
+
+// SendResponse writes the header to the underlying response writer, and
+// writes the response.
+func (rw *responseStaller) SendResponse() {
+	rw.w.WriteHeader(rw.code)
+	rw.buf.WriteTo(rw.w)
 }
