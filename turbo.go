@@ -38,19 +38,23 @@ var helperFuncs = template.FuncMap{
 }
 
 type Render struct {
+	opt       *Options
+	templates *template.Template
+}
+
+type Options struct {
 	Directory     string
 	Layout        string
 	Extensions    []string
 	Funcs         []template.FuncMap
 	IsDevelopment bool
-
-	templates *template.Template
 }
 
-func New(directory string, layout string) *Render {
-	r := &Render{
-		Directory: directory,
-		Layout:    layout,
+func New(opts ...Options) *Render {
+	r := &Render{}
+
+	for _, opt := range opts {
+		r.opt = &opt
 	}
 
 	r.prepareRender()
@@ -62,14 +66,14 @@ func New(directory string, layout string) *Render {
 // HTML renders an HTML template.
 func (r *Render) HTML(w http.ResponseWriter, status int, name string, binding interface{}) error {
 	// If we're in development mode, recompile the templates.
-	if r.IsDevelopment {
+	if r.opt.IsDevelopment {
 		r.compileTemplatesFromDir()
 	}
 
 	// Assign a layout if there is one.
-	if r.Layout != "" {
+	if r.opt.Layout != "" {
 		r.addLayoutFuncs(name, binding)
-		name = r.Layout
+		name = r.opt.Layout
 	}
 
 	// Execute the template.
@@ -99,20 +103,20 @@ func (r *Render) addLayoutFuncs(name string, binding interface{}) {
 }
 
 func (r *Render) prepareRender() {
-	if r.Directory == "" {
+	if r.opt.Directory == "" {
 		wd, err := os.Getwd()
 		if err != nil {
 			panic(err)
 		}
-		r.Directory = wd
+		r.opt.Directory = wd
 	}
 
-	if r.Layout == "" {
-		r.Layout = "layout"
+	if r.opt.Layout == "" {
+		r.opt.Layout = "layout"
 	}
 
-	if len(r.Extensions) < 1 {
-		r.Extensions = []string{".html", ".tmpl"}
+	if len(r.opt.Extensions) < 1 {
+		r.opt.Extensions = []string{".html", ".tmpl"}
 	}
 }
 
@@ -123,11 +127,11 @@ func (r *Render) prepareRender() {
 // https://github.com/unrolled/render/blob/v1/render.go#L185, since they do it
 // the best.
 func (r *Render) compileTemplatesFromDir() {
-	r.templates = template.New(r.Directory)
+	r.templates = template.New(r.opt.Directory)
 	r.templates.Delims(DefaultLeftDelim, DefaultRightDelim)
 
 	// Walk the directory and compile any valid template.
-	filepath.Walk(r.Directory, func(path string, info os.FileInfo, err error) error {
+	filepath.Walk(r.opt.Directory, func(path string, info os.FileInfo, err error) error {
 		// If we encounter a directory, return immediately since we can't
 		// compile it.
 		if info == nil || info.IsDir() {
@@ -135,7 +139,7 @@ func (r *Render) compileTemplatesFromDir() {
 		}
 
 		// Get the path relative to our root template directory.
-		rel, err := filepath.Rel(r.Directory, path)
+		rel, err := filepath.Rel(r.opt.Directory, path)
 		if err != nil {
 			return err
 		}
@@ -148,7 +152,7 @@ func (r *Render) compileTemplatesFromDir() {
 
 		// Compile each template. We check if the extension matches the
 		// allowed ones that we defined before compiling.
-		for _, extension := range r.Extensions {
+		for _, extension := range r.opt.Extensions {
 			if ext == extension {
 				buf, err := ioutil.ReadFile(path)
 				if err != nil {
@@ -159,7 +163,7 @@ func (r *Render) compileTemplatesFromDir() {
 				tmpl := r.templates.New(filepath.ToSlash(name))
 
 				// Add our funcmaps.
-				for _, funcs := range r.Funcs {
+				for _, funcs := range r.opt.Funcs {
 					tmpl.Funcs(funcs)
 				}
 

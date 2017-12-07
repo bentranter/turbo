@@ -9,7 +9,10 @@ import (
 )
 
 func TestTurbo(t *testing.T) {
-	render := turbo.New("fixtures/basic", "layout")
+	render := turbo.New(turbo.Options{
+		Directory: "fixtures/basic",
+		Layout:    "layout",
+	})
 
 	t.Run("render template without errors", func(t *testing.T) {
 		const expected = `head<p>test</p>foot`
