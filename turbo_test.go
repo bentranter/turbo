@@ -1,9 +1,11 @@
 package turbo_test
 
 import (
+	"html/template"
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	textTpl "text/template"
 
 	"github.com/martai/turbo"
 )
@@ -77,6 +79,63 @@ func TestTurbo(t *testing.T) {
 		_, err := cookieReq.Cookie(turbo.TurbolinksCookie)
 		if err != nil {
 			t.Fatalf("expected cookie but got %v", err.Error())
+		}
+	})
+}
+
+func TestTurboErrors(t *testing.T) {
+	render := turbo.New(turbo.Options{
+		Directory: "fixtures/error",
+	})
+
+	t.Run("render template with invalid HTML", func(t *testing.T) {
+		var err error
+		h := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			err = render.HTML(w, http.StatusOK, "badHTML", nil)
+		})
+
+		res := httptest.NewRecorder()
+		req, _ := http.NewRequest("GET", "/", nil)
+		h.ServeHTTP(res, req)
+
+		if err == nil {
+			t.Fatalf("expected error rendering template but got nothing")
+		}
+		tplErr, ok := err.(*template.Error)
+		if !ok {
+			t.Fatalf("expected error to be of type template error, but got %#v", err)
+		}
+		if tplErr.ErrorCode != 4 {
+			t.Fatalf("expetced error code %d but got %d", 4, tplErr.ErrorCode)
+		}
+	})
+
+	t.Run("render template with invalid data", func(t *testing.T) {
+		data := &struct {
+			V interface{}
+		}{
+			V: "test",
+		}
+		tplName := "badData"
+
+		var err error
+		h := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			err = render.HTML(w, http.StatusOK, tplName, data)
+		})
+
+		res := httptest.NewRecorder()
+		req, _ := http.NewRequest("GET", "/", nil)
+		h.ServeHTTP(res, req)
+
+		if err == nil {
+			t.Fatalf("expected error rendering template but got nothing")
+		}
+		tplErr, ok := err.(textTpl.ExecError)
+		if !ok {
+			t.Fatalf("expected error to be of type text/template exec error, but got %#v", err)
+		}
+		if tplErr.Name != tplName {
+			t.Fatalf("expected erroneous template to have name %s but got %s", tplName, tplErr.Name)
 		}
 	})
 }

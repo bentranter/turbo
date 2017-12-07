@@ -1,3 +1,10 @@
+// Package turbo provides everything you need for creating Turbolinks-style
+// frontend applications.
+//
+// TODO(ben)
+// Stuff we need:
+//	- turbo.Flash for flash messgaes
+//	- tubro.CSRF for CSRF (obv)
 package turbo
 
 import (
@@ -76,13 +83,21 @@ func (r *Render) HTML(w http.ResponseWriter, status int, name string, binding in
 		name = r.opt.Layout
 	}
 
-	// Execute the template.
-	w.WriteHeader(status)
-	r.templates.ExecuteTemplate(w, name, binding)
+	// Execute the template to an intermediate buffer to check for errors.
+	//
+	// TODO(ben) sync.Pool
+	buf := &bytes.Buffer{}
+	if err := r.templates.ExecuteTemplate(buf, name, binding); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return err
+	}
 
-	return nil
+	w.WriteHeader(status)
+	_, err := buf.WriteTo(w)
+	return err
 }
 
+// TODO(ben) sync.Pool
 func (r *Render) execute(name string, binding interface{}) (*bytes.Buffer, error) {
 	buf := &bytes.Buffer{}
 	return buf, r.templates.ExecuteTemplate(buf, name, binding)
@@ -92,7 +107,6 @@ func (r *Render) addLayoutFuncs(name string, binding interface{}) {
 	funcs := template.FuncMap{
 		"yield": func() (template.HTML, error) {
 			buf, err := r.execute(name, binding)
-			// Return safe HTML here since we are rendering our own template.
 			return template.HTML(buf.String()), err
 		},
 	}
@@ -109,10 +123,6 @@ func (r *Render) prepareRender() {
 			panic(err)
 		}
 		r.opt.Directory = wd
-	}
-
-	if r.opt.Layout == "" {
-		r.opt.Layout = "layout"
 	}
 
 	if len(r.opt.Extensions) < 1 {
