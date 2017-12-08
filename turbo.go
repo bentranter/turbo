@@ -198,8 +198,36 @@ func Handler(h http.Handler) http.Handler {
 			return
 		}
 
+		// Check for POST request. If we do encounter a POST request, execute
+		// the HTTP handler, but then tell the client to redirect accoringly.
+		if r.Method == http.MethodPost {
+			rs := &responseStaller{
+				w:    w,
+				code: 0,
+				buf:  &bytes.Buffer{},
+			}
+			h.ServeHTTP(rs, r)
+
+			// TODO(ben) This opens you up to JavaScript injection via the
+			// value of `location`!!
+			if location := rs.Header().Get("Location"); location != "" {
+				rs.Header().Set("Content-Type", "text/javascript")
+				rs.Header().Set("X-Content-Type-Options", "nosniff")
+				// Un-break back button, since Turbolinks will update the
+				// History for us.
+				rs.Header().Del("Location")
+				rs.WriteHeader(http.StatusOK)
+				rs.Write([]byte(`Turbolinks.clearCache();Turbolinks.visit("` + location + `", {action: "advance"});`))
+			}
+
+			rs.SendResponse()
+			return
+		}
+
+		// If the Turbolinks cookie is found, then redirect to the location
+		// specified in the cookie.
 		if cookie, err := r.Cookie(TurbolinksCookie); err == nil {
-			w.Header().Set("Turbolinks-Location", "/")
+			w.Header().Set("Turbolinks-Location", cookie.Value)
 			cookie.MaxAge = -1
 			http.SetCookie(w, cookie)
 		}
@@ -224,14 +252,13 @@ func Handler(h http.Handler) http.Handler {
 		// will force Turbolinks to update the URL (as push state history) for
 		// that redirect. We do this by setting a cookie on this request that
 		// we can check on the next request.
-		//
-		// TODO(ben) Also handle POST redirects properly.
 		if location := rs.Header().Get("Location"); location != "" {
 			http.SetCookie(rs, &http.Cookie{
 				Name:     TurbolinksCookie,
-				Value:    "true",
+				Value:    location,
 				Path:     "/",
 				HttpOnly: true,
+				Secure:   IsTLS(r),
 			})
 		}
 
@@ -267,4 +294,15 @@ func (rw *responseStaller) Header() http.Header {
 func (rw *responseStaller) SendResponse() {
 	rw.w.WriteHeader(rw.code)
 	rw.buf.WriteTo(rw.w)
+}
+
+// IsTLS is a helper to check if a requets was performed over HTTPS.
+func IsTLS(r *http.Request) bool {
+	if r.TLS != nil {
+		return true
+	}
+	if strings.ToLower(r.Header.Get("X-Forwarded-Proto")) == "https" {
+		return true
+	}
+	return false
 }
