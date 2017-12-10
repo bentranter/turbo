@@ -213,11 +213,29 @@ func Handler(h http.Handler) http.Handler {
 			if location := rs.Header().Get("Location"); location != "" {
 				rs.Header().Set("Content-Type", "text/javascript")
 				rs.Header().Set("X-Content-Type-Options", "nosniff")
-				// Un-break back button, since Turbolinks will update the
-				// History for us.
-				rs.Header().Del("Location")
 				rs.WriteHeader(http.StatusOK)
-				rs.Write([]byte(`Turbolinks.clearCache();Turbolinks.visit("` + location + `", {action: "advance"});`))
+
+				// Remove Location header since we're returning a 200
+				// response.
+				rs.Header().Del("Location")
+
+				// Create the JavaScript to send to the frontend for
+				// redirection after a form submit.
+				//
+				// Also, escape the location value so that it can't be used
+				// for frontend JavaScript injection.
+				js := []byte(`Turbolinks.clearCache();Turbolinks.visit("` + template.JSEscapeString(location) + `", {action: "advance"});`)
+
+				// Write the hash of the JavaScript so we can send it in the
+				// Content Security Policy header, in order to prevent inline
+				// scripts.
+				//
+				// hash := sha256.New()
+				// hash.Write(js)
+				// sha := hex.EncodeToString(hash.Sum(nil))
+				// rs.Header().Set("Content-Security-Policy", "script-src 'sha256-"+sha+"'")
+
+				rs.Write(js)
 			}
 
 			rs.SendResponse()
