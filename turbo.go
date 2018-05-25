@@ -42,6 +42,9 @@ var helperFuncs = template.FuncMap{
 	"yield": func() (string, error) {
 		return "", fmt.Errorf("yield called with no layout defined")
 	},
+	"partial": func() (string, error) {
+		return "", fmt.Errorf("block called with no layout defined")
+	},
 }
 
 type Render struct {
@@ -71,14 +74,26 @@ func New(opts ...Options) *Render {
 }
 
 // HTML renders an HTML template.
-func (r *Render) HTML(w http.ResponseWriter, status int, name string, binding interface{}) error {
+//
+// If the partial option is passed as true, the template will render without
+// its layout.
+func (r *Render) HTML(w http.ResponseWriter, status int, name string, binding interface{}, partial ...bool) error {
 	// If we're in development mode, recompile the templates.
 	if r.opt.IsDevelopment {
 		r.compileTemplatesFromDir()
 	}
 
-	// Assign a layout if there is one.
-	if r.opt.Layout != "" {
+	// Check if we're rendering a partial.
+	isPartial := false
+	for _, b := range partial {
+		isPartial = b
+	}
+
+	// Assign a layout if there is one, and if we're not rendering a partial.
+	//
+	// TODO(ben) reconsider if this would be better achieved by checking if
+	// we're getting something from the partials directory.
+	if r.opt.Layout != "" && !isPartial {
 		r.addLayoutFuncs(name, binding)
 		name = r.opt.Layout
 	}
@@ -97,6 +112,40 @@ func (r *Render) HTML(w http.ResponseWriter, status int, name string, binding in
 	return err
 }
 
+// String renders an HTML template to a string.
+//
+// If the partial option is passed as true, the template will render without
+// its layout.
+func (r *Render) String(name string, binding interface{}, partial ...bool) (string, error) {
+	// If we're in development mode, recompile the templates.
+	if r.opt.IsDevelopment {
+		r.compileTemplatesFromDir()
+	}
+
+	// Check if we're rendering a partial.
+	isPartial := false
+	for _, b := range partial {
+		isPartial = b
+	}
+
+	// Assign a layout if there is one, and if we're not rendering a partial.
+	//
+	// TODO(ben) reconsider if this would be better achieved by checking if
+	// we're getting something from the partials directory.
+	if r.opt.Layout != "" && !isPartial {
+		r.addLayoutFuncs(name, binding)
+		name = r.opt.Layout
+	}
+
+	// TODO(ben) sync.Pool
+	buf := &bytes.Buffer{}
+	if err := r.templates.ExecuteTemplate(buf, name, binding); err != nil {
+		return "", err
+	}
+
+	return buf.String(), nil
+}
+
 // TODO(ben) sync.Pool
 func (r *Render) execute(name string, binding interface{}) (*bytes.Buffer, error) {
 	buf := &bytes.Buffer{}
@@ -109,11 +158,33 @@ func (r *Render) addLayoutFuncs(name string, binding interface{}) {
 			buf, err := r.execute(name, binding)
 			return template.HTML(buf.String()), err
 		},
+
+		"partial": func(partialName string) (template.HTML, error) {
+			fullPartialName := fmt.Sprintf("%s-%s", partialName, name)
+			if r.TemplateLookup(fullPartialName) == nil {
+				fullPartialName = partialName
+			}
+
+			if r.TemplateLookup(fullPartialName) != nil {
+				buf, err := r.execute(fullPartialName, binding)
+				// Return safe HTML here since we are rendering our own template.
+				return template.HTML(buf.String()), err
+			}
+
+			return "", nil
+		},
 	}
 
 	if tpl := r.templates.Lookup(name); tpl != nil {
 		tpl.Funcs(funcs)
 	}
+}
+
+// TemplateLookup is a wrapper around template.Lookup and returns
+// the template with the given name that is associated with t, or nil
+// if there is no such template.
+func (r *Render) TemplateLookup(t string) *template.Template {
+	return r.templates.Lookup(t)
 }
 
 func (r *Render) prepareRender() {

@@ -4,7 +4,7 @@ Turbo is a Go backend for Basecamp's [Turbolinks](https://github.com/turbolinks/
 
 ### Usage
 
-Wrap an `http.Handler` in `Turbo.Handler`, ie:
+Wrap an `http.Handler` in `turbo.Handler`, ie:
 
 ```go
 package main
