@@ -57,6 +57,29 @@ func TestTurbo(t *testing.T) {
 		}
 	})
 
+	t.Run("render a partial", func(t *testing.T) {
+		const expected = `<p>test</p>`
+		var err error
+		h := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			err = render.HTML(w, http.StatusOK, "content", "test", true)
+		})
+		if err != nil {
+			t.Fatalf("unexpected error rendering template: %v", err)
+		}
+
+		res := httptest.NewRecorder()
+		req, _ := http.NewRequest("GET", "/", nil)
+		h.ServeHTTP(res, req)
+
+		if res.Code != http.StatusOK {
+			t.Fatalf("expected HTTP status %d but got %d", http.StatusOK, res.Code)
+		}
+		body := res.Body.String()
+		if body != expected {
+			t.Fatalf("expected %s but got %s", expected, body)
+		}
+	})
+
 	t.Run("turbolinks redirect", func(t *testing.T) {
 		h := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			http.Redirect(w, r, "/redirect", http.StatusFound)
