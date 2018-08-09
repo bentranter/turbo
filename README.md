@@ -1,4 +1,4 @@
-# Turbo[![CircleCI](https://circleci.com/gh/bentranter/turbo.svg?style=svg)](https://circleci.com/gh/bentranter/turbo)
+# Turbo [![CircleCI](https://circleci.com/gh/bentranter/turbo.svg?style=svg)](https://circleci.com/gh/bentranter/turbo)
 
 Turbo is a Go backend for Basecamp's [Turbolinks](https://github.com/turbolinks/turbolinks).
 
