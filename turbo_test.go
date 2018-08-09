@@ -20,7 +20,7 @@ func TestTurbo(t *testing.T) {
 		const expected = `head<p>test</p>foot`
 		var err error
 		h := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			err = render.HTML(w, http.StatusOK, "content", "test")
+			err = render.HTML(w, r, http.StatusOK, "content", "test")
 		})
 		if err != nil {
 			t.Fatalf("unexpected error rendering template: %v", err)
@@ -42,7 +42,7 @@ func TestTurbo(t *testing.T) {
 	t.Run("render unnamed template", func(t *testing.T) {
 		var err error
 		h := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			err = render.HTML(w, http.StatusOK, "notFound", "test")
+			err = render.HTML(w, r, http.StatusOK, "notFound", "test")
 		})
 		if err != nil {
 			t.Fatalf("expecting error when rendering non-existent template but got nil")
@@ -61,7 +61,7 @@ func TestTurbo(t *testing.T) {
 		const expected = `<p>test</p>`
 		var err error
 		h := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			err = render.HTML(w, http.StatusOK, "content", "test", true)
+			err = render.HTML(w, r, http.StatusOK, "content", "test", true)
 		})
 		if err != nil {
 			t.Fatalf("unexpected error rendering template: %v", err)
@@ -140,7 +140,7 @@ func TestTurboErrors(t *testing.T) {
 	t.Run("render template with invalid HTML", func(t *testing.T) {
 		var err error
 		h := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			err = render.HTML(w, http.StatusOK, "badHTML", nil)
+			err = render.HTML(w, r, http.StatusOK, "badHTML", nil)
 		})
 
 		res := httptest.NewRecorder()
@@ -169,7 +169,7 @@ func TestTurboErrors(t *testing.T) {
 
 		var err error
 		h := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			err = render.HTML(w, http.StatusOK, tplName, data)
+			err = render.HTML(w, r, http.StatusOK, tplName, data)
 		})
 
 		res := httptest.NewRecorder()
