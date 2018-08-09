@@ -7,7 +7,7 @@ import (
 	"testing"
 	textTpl "text/template"
 
-	"github.com/martai/turbo"
+	"github.com/bentranter/turbo"
 )
 
 func TestTurbo(t *testing.T) {

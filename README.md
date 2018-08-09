@@ -12,7 +12,7 @@ package main
 import (
     "net/http"
 
-    "github.com/martai/turbo"
+    "github.com/bentranter/turbo"
 )
 
 func main() {
