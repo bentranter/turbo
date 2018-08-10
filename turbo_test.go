@@ -16,15 +16,29 @@ func TestTurbo(t *testing.T) {
 		Layout:    "layout",
 	})
 
+	t.Run("rendering non-existent template should error", func(t *testing.T) {
+		h := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if err := render.HTML(w, r, http.StatusOK, "not/found", "test"); err == nil {
+				t.Fatalf("expected error when rendering non-existent template but got none")
+			}
+		})
+
+		res := httptest.NewRecorder()
+		req, _ := http.NewRequest("GET", "/", nil)
+		h.ServeHTTP(res, req)
+
+		if res.Code != http.StatusInternalServerError {
+			t.Fatalf("expected HTTP status %d but got %d", http.StatusInternalServerError, res.Code)
+		}
+	})
+
 	t.Run("render template without errors", func(t *testing.T) {
 		const expected = `head<p>test</p>foot`
-		var err error
 		h := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			err = render.HTML(w, r, http.StatusOK, "content", "test")
+			if err := render.HTML(w, r, http.StatusOK, "content", "test"); err != nil {
+				t.Fatalf("unexpected error rendering template: %v", err)
+			}
 		})
-		if err != nil {
-			t.Fatalf("unexpected error rendering template: %v", err)
-		}
 
 		res := httptest.NewRecorder()
 		req, _ := http.NewRequest("GET", "/", nil)
@@ -36,24 +50,6 @@ func TestTurbo(t *testing.T) {
 		body := res.Body.String()
 		if body != expected {
 			t.Fatalf("expected %s but got %s", expected, body)
-		}
-	})
-
-	t.Run("render unnamed template", func(t *testing.T) {
-		var err error
-		h := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			err = render.HTML(w, r, http.StatusOK, "notFound", "test")
-		})
-		if err != nil {
-			t.Fatalf("expecting error when rendering non-existent template but got nil")
-		}
-
-		res := httptest.NewRecorder()
-		req, _ := http.NewRequest("GET", "/", nil)
-		h.ServeHTTP(res, req)
-
-		if res.Code == http.StatusInternalServerError {
-			t.Fatalf("expected HTTP status %d but got %d", http.StatusInternalServerError, res.Code)
 		}
 	})
 
@@ -129,6 +125,62 @@ func TestTurbo(t *testing.T) {
 		if actualJS != expectedJS {
 			t.Fatalf("expected response to be %s but got %s", expectedJS, actualJS)
 		}
+	})
+}
+
+func TestRender_String(t *testing.T) {
+	render := turbo.New(turbo.Options{
+		Directory: "fixtures/basic",
+		Layout:    "layout",
+	})
+
+	t.Run("rendering an non-existent template to a string should error", func(t *testing.T) {
+		h := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if _, err := render.String(w, r, "notFound", nil); err == nil {
+				t.Fatalf("expected error rendering non-existent template, but got none")
+			}
+		})
+
+		res := httptest.NewRecorder()
+		req, _ := http.NewRequest("GET", "/", nil)
+		h.ServeHTTP(res, req)
+	})
+
+	t.Run("render template to string", func(t *testing.T) {
+		const expected = `head<p>test</p>foot`
+
+		h := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			actual, err := render.String(w, r, "content", "test")
+			if err != nil {
+				t.Fatalf("unexpected error rendering template: %v", err)
+			}
+
+			if actual != expected {
+				t.Fatalf("expected %s but got %s", expected, actual)
+			}
+		})
+
+		res := httptest.NewRecorder()
+		req, _ := http.NewRequest("GET", "/", nil)
+		h.ServeHTTP(res, req)
+	})
+
+	t.Run("render a partial", func(t *testing.T) {
+		const expected = `<p>test</p>`
+		h := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			actual, err := render.String(w, r, "content", "test", true)
+			if err != nil {
+				t.Fatalf("unexpected error rendering template: %v", err)
+			}
+
+			if actual != expected {
+				t.Fatalf("expected %s but got %s", expected, actual)
+			}
+		})
+
+		res := httptest.NewRecorder()
+		req, _ := http.NewRequest("GET", "/", nil)
+		h.ServeHTTP(res, req)
 	})
 }
 
