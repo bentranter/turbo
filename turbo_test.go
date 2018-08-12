@@ -240,3 +240,47 @@ func TestTurboErrors(t *testing.T) {
 		}
 	})
 }
+
+func TestRender_Flash(t *testing.T) {
+	t.Parallel()
+
+	render := turbo.New(turbo.Options{
+		Directory: "fixtures/basic",
+		Layout:    "layout",
+	})
+
+	const message = "test flash message"
+
+	req := httptest.NewRequest(http.MethodPost, "/", nil)
+	res := httptest.NewRecorder()
+
+	var raw string
+	t.Run("set a flash message", func(t *testing.T) {
+		h := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			render.Flash(w, message)
+		})
+		h.ServeHTTP(res, req)
+
+		raw = res.Header().Get("Set-Cookie")
+		if raw == "" {
+			t.Fatalf("failed to set cookie on request")
+		}
+	})
+
+	// Setup.
+	header := http.Header{}
+	header.Add("Cookie", raw)
+	req.Header = header
+
+	t.Run("get a flash message", func(t *testing.T) {
+		var flash string
+		h := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			flash = render.GetFlash(w, r)
+		})
+		h.ServeHTTP(res, req)
+
+		if flash != message {
+			t.Fatalf("expected flash message to be %s but got %s", message, flash)
+		}
+	})
+}
