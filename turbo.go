@@ -47,10 +47,7 @@ const (
 // registered during initial template parsing.
 var helperFuncs = template.FuncMap{
 	"yield": func() (string, error) {
-		return "", fmt.Errorf("yield called with no layout defined")
-	},
-	"partial": func() (string, error) {
-		return "", fmt.Errorf("partial called with no layout defined")
+		return "", fmt.Errorf("yield called with no layout template defined")
 	},
 	"currentpage": func(page string) bool { return false },
 	"gitsha":      func() string { return "" },
@@ -188,21 +185,6 @@ func (r *Render) addLayoutFuncs(w http.ResponseWriter, req *http.Request, name s
 		"yield": func() (template.HTML, error) {
 			buf, err := r.execute(name, binding)
 			return template.HTML(buf.String()), err
-		},
-
-		"partial": func(partialName string) (template.HTML, error) {
-			fullPartialName := fmt.Sprintf("%s-%s", partialName, name)
-			if r.TemplateLookup(fullPartialName) == nil {
-				fullPartialName = partialName
-			}
-
-			if r.TemplateLookup(fullPartialName) != nil {
-				buf, err := r.execute(fullPartialName, binding)
-				// Return safe HTML here since we are rendering our own template.
-				return template.HTML(buf.String()), err
-			}
-
-			return "", nil
 		},
 
 		// currentpage returns the current URL path.
